@@ -21,14 +21,17 @@ public class Request {
 
     private LocalDateTime createdAt;
 
+    private String userNameManager;
+
     private boolean completed;
 
     public Request() {
     }
 
-    public Request(String userName,  String enduroName, LocalDateTime createdAt, boolean completed) {
+    public Request(String userName, String enduroName, LocalDateTime createdAt, String userNameManager, boolean completed) {
         this.enduroName = enduroName;
         this.createdAt = createdAt;
+        this.userNameManager = userNameManager;
         this.completed = completed;
         this.userName = userName;
     }
@@ -71,5 +74,13 @@ public class Request {
 
     public void setCompleted(boolean completed) {
         this.completed = completed;
+    }
+
+    public String getUserNameManager() {
+        return userNameManager;
+    }
+
+    public void setUserNameManager(String userNameManager) {
+        this.userNameManager = userNameManager;
     }
 }

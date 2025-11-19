@@ -140,6 +140,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                     if (requestToDelete != null && !requestToDelete.isCompleted()){
                         sendMessageToChat(chatId, "Запрос на покупку с номером " + requestToDelete.getId() +",  от пользователя @" +requestToDelete.getUserName()+" успешно переведен в статус завершенных", getBackToMainKeyboardMarkup());
                         requestToDelete.setCompleted(true);
+                        requestToDelete.setUserNameManager(userService.findById(chatId).getUserName());
                         requestService.save(requestToDelete);
                         return;
                     }
@@ -187,7 +188,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                             userStatusMap.put(chatId, UserStatus.DEFAULT);
 
                             sendMessageToChat(chatId, "Заказ успешно оформлен, можно выйти в главное меню, мы уже занимаемся вашей заявкой, ждите пока вам напишет менеджер", getBackToMainKeyboardMarkup());
-                            NotifyAllManagers(requestService.save(new Request(update.getMessage().getChat().getUserName(), text, LocalDateTime.now(), false)));
+                            NotifyAllManagers(requestService.save(new Request(update.getMessage().getChat().getUserName(), text, LocalDateTime.now(), null, false)));
                             return;
                         }
 
@@ -238,10 +239,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                             return;
                         }
 
-                        //EnduroEntity savedEnduro = enduroEntityService.save(enduroEntity);
                         sendMessageToChat(chatId, "Данные записаны, отправте фото для эндуро", getBackToMainKeyboardMarkup());
-                       // sendMessageWithImage(chatId, getInfoByEnduro(savedEnduro), savedEnduro.getName(), getBackToMainKeyboardMarkup());
-
                         userStatusMap.put(chatId, UserStatus.ENTER_ENDURO_PHOTO);
                         return;
                     }
@@ -260,8 +258,6 @@ public class TelegramBot extends TelegramLongPollingBot {
                         sendMessageToChat(chatId, "Что то пошло не так при загрузке фото", getBackToMainKeyboardMarkup());
                         return;
                     }
-
-
 
 
                     EnduroEntity enduro = enduroEntityService.findByName(text);
