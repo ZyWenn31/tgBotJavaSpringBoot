@@ -19,17 +19,9 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMar
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-
 
 @Slf4j
 @Component
@@ -37,7 +29,8 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     private final BotConfig botConfig;
     Map<Long, UserStatus> userStatusMap = new HashMap<>();
-    private EnduroEntity enduroEntity;
+    Map<Long, EnduroEntity> userEnduroMap = new HashMap<>();
+
 
     private static final String SUPPORT_TEXT = EmojiParser.parseToUnicode("Мы будем рады любой обратной связи, с нами можно связаться:\n\n" +
             "\uD83D\uDD35 Телеграмм: @tg_loha323\n\n" +
@@ -98,25 +91,29 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 
             if (update.getMessage().hasText()){
-                if (text.contains("/request") && (userService.findById(chatId).isAdministrator() || userService.findById(chatId).getRole().equals("MANAGER"))){
+                if (text.startsWith("/request") && (userService.findById(chatId).isAdministrator() || userService.findById(chatId).getRole().equals("MANAGER"))){
                     sendMessageToChat(chatId, getAllRequestAsString(), getBackToMainKeyboardMarkup());
                     userStatusMap.put(chatId, UserStatus.DEFAULT);
+                    log.info("user {} chek clients request at {}", userService.findById(chatId), LocalDateTime.now());
                     return;
                 }
 
-                if (text.contains("/newenduro") && (userService.findById(chatId).isAdministrator() || userService.findById(chatId).getRole().equals("MANAGER"))){
+                if (text.startsWith("/newenduro") && (userService.findById(chatId).isAdministrator() || userService.findById(chatId).getRole().equals("MANAGER"))){
                     sendMessageToChat(chatId, "Пришлите название модели", getBackToMainKeyboardMarkup());
                     userStatusMap.put(chatId, UserStatus.ENTER_ENDURO_NAME);
+                    userEnduroMap.put(chatId, new EnduroEntity());
+
                     return;
                 }
 
-                if (text.contains("/deleteenduro") && (userService.findById(chatId).isAdministrator() || userService.findById(chatId).getRole().equals("MANAGER"))){
+                if (text.startsWith("/deleteenduro") && (userService.findById(chatId).isAdministrator() || userService.findById(chatId).getRole().equals("MANAGER"))){
                     String enduroNameToDelete = text.substring(text.indexOf(" ") + 1);
                     EnduroEntity enduroToDelete = enduroEntityService.findByName(enduroNameToDelete);
 
                     if (enduroToDelete != null){
                         sendMessageToChat(chatId, "Эндуро " +enduroToDelete.getName()+" успешно удален из каталога", getBackToMainKeyboardMarkup());
                         enduroEntityService.delete(enduroToDelete.getId());
+                        log.info("user {} delete enduro {} at {}", userService.findById(chatId), enduroToDelete.getName(), LocalDateTime.now());
                         return;
                     }
 
@@ -124,7 +121,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                     return;
                 }
 
-                if (text.contains("/completerequest") && (userService.findById(chatId).isAdministrator() || userService.findById(chatId).getRole().equals("MANAGER"))){
+                if (text.startsWith("/completerequest") && (userService.findById(chatId).isAdministrator() || userService.findById(chatId).getRole().equals("MANAGER"))){
                     String requestNumberToDelete = text.substring(text.indexOf(" ") + 1);
 
                     Long reqNum;
@@ -142,6 +139,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                         requestToDelete.setCompleted(true);
                         requestToDelete.setUserNameManager(userService.findById(chatId).getUserName());
                         requestService.save(requestToDelete);
+                        log.info("user {} complete task with id {} for @{} at {}", userService.findById(chatId), requestToDelete.getId(), requestToDelete.getUserName(), LocalDateTime.now());
                         return;
                     }
 
@@ -158,12 +156,13 @@ public class TelegramBot extends TelegramLongPollingBot {
                             "Для просмотра каталога доступных эндуро нажмите 'Каталог';\n\n" +
                             "Для получения полной информации про эндуро скопирйте его название и отправте его боту;\n\n" +
                             "Для оформления заказа нажмите 'Сделать заказ'."), getKeyboardMarkup());
+                    log.info("User {} send start at {}", userService.findById(chatId), LocalDateTime.now());
                     break;
                 }
                 case "На главную":{
                     sendMessageToChat(chatId, EmojiParser.parseToUnicode("Самое время оформить заказ - выберите модель и оставте заявку  \uD83D\uDEF8"), getKeyboardMarkup());
                     userStatusMap.put(chatId, UserStatus.DEFAULT);
-                    enduroEntity = new EnduroEntity();
+                    userEnduroMap.put(chatId, new EnduroEntity());
                     break;
                 }
                 case "Связь с нами":{
@@ -202,8 +201,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                             sendMessageToChat(chatId, "Отлично, теперь пришлите описание для эндуро", getBackToMainKeyboardMarkup());
                             userStatusMap.put(chatId, UserStatus.ENTER_ENDURO_DESCRIPTION);
 
-                            this.enduroEntity = new EnduroEntity();
-                            enduroEntity.setName(text);
+                            userEnduroMap.get(chatId).setName(text);
                             return;
                         }
 
@@ -212,7 +210,8 @@ public class TelegramBot extends TelegramLongPollingBot {
                     }
 
                     if (userStatusMap.get(chatId) == UserStatus.ENTER_ENDURO_DESCRIPTION){
-                        enduroEntity.setDescription(text);
+                        userEnduroMap.get(chatId).setDescription(text);
+
                         userStatusMap.put(chatId, UserStatus.ENTER_ENDURO_SPECS);
 
                         sendMessageToChat(chatId, "Теперь необходимо ввести характеристики в отдельном сообщении, строго в виде:\nкубы,такты,лошадСилы,вес", getBackToMainKeyboardMarkup());
@@ -220,7 +219,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                     }
 
                     if (userStatusMap.get(chatId) == UserStatus.ENTER_ENDURO_SPECS){
-                        if (enduroSpecsValid(text)){
+                        if (enduroSpecsValid(text, chatId)){
                             userStatusMap.put(chatId, UserStatus.ENTER_ENDURO_PRICE);
                             sendMessageToChat(chatId, "Характеристики успешно добавленны, введите стоимость", getBackToMainKeyboardMarkup());
                             return;
@@ -233,7 +232,8 @@ public class TelegramBot extends TelegramLongPollingBot {
 
                     if (userStatusMap.get(chatId) == UserStatus.ENTER_ENDURO_PRICE){
                         try{
-                            enduroEntity.setPrice(Integer.parseInt(text));
+                            userEnduroMap.get(chatId).setPrice(Integer.parseInt(text));
+
                         } catch (NumberFormatException e) {
                             sendMessageToChat(chatId, "Цена должна быть целым числом", getBackToMainKeyboardMarkup());
                             return;
@@ -246,12 +246,13 @@ public class TelegramBot extends TelegramLongPollingBot {
 
                     if (userStatusMap.get(chatId) == UserStatus.ENTER_ENDURO_PHOTO){
 
-                        if (getAndSavePhoto(update.getMessage().getPhoto())){
-                            EnduroEntity savedEnduro = enduroEntityService.save(enduroEntity);
+                        if (getAndSavePhoto(update.getMessage().getPhoto(), chatId)){
+                            EnduroEntity savedEnduro = enduroEntityService.save(userEnduroMap.get(chatId));
                             sendMessageToChat(chatId, "Эндуро добавлен в каталог:", getBackToMainKeyboardMarkup());
                             sendMessageWithImage(chatId, getInfoByEnduro(savedEnduro), savedEnduro.getName(), getBackToMainKeyboardMarkup());
-
                             userStatusMap.put(chatId, UserStatus.DEFAULT);
+
+                            log.info("user {} save new enduro {} at {}", userService.findById(chatId), savedEnduro.getName(), LocalDateTime.now());
                             return;
                         }
 
@@ -282,39 +283,35 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    private boolean getAndSavePhoto(List<PhotoSize> photoSizes) {
+    private boolean getAndSavePhoto(List<PhotoSize> photoSizes, long chatId) {
+
         PhotoSize photoSize = photoSizes.stream()
                 .max(Comparator.comparing(PhotoSize::getFileSize))
                 .orElse(null);
+        if (photoSize == null) return false;
 
-        String fileId = photoSize.getFileId();
+        // Запрашиваем информацию о файле
         GetFile getFile = new GetFile();
-        getFile.setFileId(fileId);
-        File file = new File();
+        getFile.setFileId(photoSize.getFileId());
+
         try {
-            file = execute(getFile);
+            // Получаем объект File от Telegram
+            org.telegram.telegrambots.meta.api.objects.File tgFile = execute(getFile);
+
+            // Безопасно качаем файл, НЕ используя токен в URL
+            String savePath = "upload/" + userEnduroMap.get(chatId).getName() + ".jpg";
+            downloadFile(tgFile.getFilePath(), new java.io.File(savePath));
+
+            return true;
+
         } catch (TelegramApiException e) {
-            log.error("Error get file:{}", e.getMessage());
+            log.error("Ошибка при загрузке фото: {}", e.getMessage());
             return false;
         }
-        String filePath = file.getFilePath();
-
-        String fileUrl = "https://api.telegram.org/file/bot" + botConfig.getBotToken() + "/" + filePath;
-        String savePath = "upload/" + enduroEntity.getName() + ".jpg";
-
-        try (InputStream in = new URL(fileUrl).openStream()) {
-            Files.copy(in, Paths.get(savePath), StandardCopyOption.REPLACE_EXISTING);
-        } catch (MalformedURLException e) {
-            throw new RuntimeException(e);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        return true;
-
     }
 
-    private boolean enduroSpecsValid(String text) {
+
+    private boolean enduroSpecsValid(String text, long chatId) {
 
         int cubes, tact, horsePower, weight;
         String[] specs = Arrays.stream(text.split(","))
@@ -330,10 +327,11 @@ public class TelegramBot extends TelegramLongPollingBot {
             return false;
         }
 
-        enduroEntity.setCubes(cubes);
-        enduroEntity.setTact(tact);
-        enduroEntity.setHorsepower(horsePower);
-        enduroEntity.setWeight(weight);
+        userEnduroMap.get(chatId).setCubes(cubes);
+        userEnduroMap.get(chatId).setTact(tact);
+        userEnduroMap.get(chatId).setHorsepower(horsePower);
+        userEnduroMap.get(chatId).setWeight(weight);
+        //
 
         return true;
     }
@@ -359,10 +357,12 @@ public class TelegramBot extends TelegramLongPollingBot {
 
 
     private void registerUser(Long chatId, Chat chat){
-            User user = new User(chatId, chat.getFirstName(), chat.getLastName(), chat.getUserName(), LocalDate.now(), false, "MEMBER");
+        if (userService.findById(chatId) == null){
+            User user = new User(chatId, chat.getFirstName(), chat.getLastName(), chat.getUserName(), LocalDate.now(), false, UserRole.MEMBER.toString());
 
             userService.save(user);
-            log.info("user saved: {}", user);
+            log.info("user saved: {} at {}", user, LocalDateTime.now());
+        }
     }
 
 
@@ -509,4 +509,5 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         return stringBuilder.toString();
     }
+
 }
