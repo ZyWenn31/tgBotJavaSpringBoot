@@ -196,6 +196,10 @@ public class TelegramBot extends TelegramLongPollingBot {
                     }
 
                     if (userStatusMap.get(chatId) == UserStatus.ENTER_ENDURO_NAME){
+                        if (!isValidFileName(text)){
+                            sendMessageToChat(chatId, "Введите корректное название эндуро", getBackToMainKeyboardMarkup());
+                            return;
+                        }
                         EnduroEntity enduro = enduroEntityService.findByName(text);
                         if(enduro == null){
                             sendMessageToChat(chatId, "Отлично, теперь пришлите описание для эндуро", getBackToMainKeyboardMarkup());
@@ -509,5 +513,19 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         return stringBuilder.toString();
     }
+
+    public boolean isValidFileName(String fileName) {
+
+        if (fileName.contains("..") || fileName.startsWith("/") || fileName.startsWith("\\")) {
+            return false;
+        }
+
+        if (!fileName.matches("[a-zA-Z0-9._\\- ]+")) {
+            return false;
+        }
+
+        return true;
+    }
+
 
 }
